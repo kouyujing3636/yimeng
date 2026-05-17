@@ -20,7 +20,7 @@
       --rain-color: rgba(156, 163, 175, 0.2);
       --memory-bg: #ffffff;
       --memory-border: #d1d5db;
-      --chat-font-size: 14px; /* 动态气泡文字大小变量 */
+      --chat-font-size: 12px; /* 动态气泡文字大小变量，默认调小 */
     }
 
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -85,7 +85,7 @@
 
     .page {
       width: min(900px, calc(100vw - 32px));
-      margin: 100px auto 40px;
+      margin: 60px auto 20px; /* 减小顶部边距，让聊天界面占更大位置 */
       position: relative; z-index: 1;
     }
     .view-section { display: none; animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
@@ -163,14 +163,17 @@
     .sidebar-panel {
       position: fixed; top: 0; right: -450px; width: 400px; height: 100%;
       background: var(--paper); box-shadow: -10px 0 40px rgba(0,0,0,0.05);
-      z-index: 101; transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 2000; /* 提高层级，盖住导航栏 */
+      transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
       padding: 40px 30px; overflow-y: auto; border-left: 1px solid var(--line);
     }
     .sidebar-panel.active { right: 0; }
 
     /* 聊天界面 */
     .chat-history {
-      height: 550px; overflow-y: auto; background: var(--paper-soft);
+      height: 70vh; /* 使用视口高度，让聊天区域更大 */
+      overflow-y: auto; background: var(--paper-soft);
+      background-size: cover; background-position: center; /* 用于背景图片 */
       border: 1px solid var(--line); border-radius: 12px;
       padding: 24px; margin-bottom: 20px; display: flex;
       flex-direction: column; gap: 20px; scroll-behavior: smooth;
@@ -414,12 +417,12 @@
           </div>
           
           <div class="field">
-            <textarea id="userInput" rows="4" placeholder="写下你想对Ta说的话，或是你的动作神态..."></textarea>
+            <textarea id="userInput" rows="1" placeholder="写下你想对Ta说的话……" style="resize: none; overflow-y: hidden; min-height: 40px; max-height: 150px;"></textarea>
           </div>
-          <div class="btn-row">
-            <button id="sendBtn" class="action-btn primary">传思</button>
-            <button id="getReplyBtn" class="action-btn">梦中思</button>
-            <button id="clearChatBtn" class="action-btn">斩断前缘</button>
+          <div class="btn-row" style="gap: 5px; margin-top: 10px;">
+            <button id="sendBtn" class="action-btn primary" style="font-size: 11px; padding: 4px 10px;">传思</button>
+            <button id="getReplyBtn" class="action-btn" style="font-size: 11px; padding: 4px 10px;">梦中思</button>
+            <button id="clearChatBtn" class="action-btn" style="font-size: 11px; padding: 4px 10px;">斩断前缘</button>
           </div>
         </div>
       </section>
@@ -470,8 +473,13 @@
     </div>
 
     <div class="field" style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--line);">
-      <label>聊天气泡文字大小: <span id="chatSizeDisplay">14px</span></label>
-      <input type="range" id="chatSizeSlider" min="12" max="24" value="14" style="width: 100%; margin-top: 8px;" />
+      <label>聊天气泡文字大小: <span id="chatSizeDisplay">12px</span></label>
+      <input type="range" id="chatSizeSlider" min="10" max="20" value="12" style="width: 100%; margin-top: 8px;" />
+    </div>
+    <div class="field">
+      <label>聊天背景图片 (支持大文件)</label>
+      <input type="file" id="chatBgInput" accept="image/*" />
+      <button id="clearBgBtn" class="action-btn" style="margin-top: 8px; font-size: 11px; padding: 4px 8px;">清除背景</button>
     </div>
     
     <button id="closeSidebarBtn" class="action-btn" style="margin-top:30px; width:100%;">合上书页</button>
@@ -1162,16 +1170,30 @@
       }
     });
 
-    sendBtn.addEventListener('click', async () => {
+    // 发送消息逻辑（不立即回复）
+    sendBtn.addEventListener('click', () => {
       const userText = userInputEl.value.trim();
       if (!userText) return;
 
       conversationHistory.push({ role: 'user', content: userText });
       userInputEl.value = '';
+      userInputEl.style.height = 'auto'; // 重置输入框高度
       renderChat();
       saveDataLocally();
-      
-      await triggerApiCall();
+    });
+
+    // 监听回车键发送
+    userInputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault(); // 阻止默认换行
+        sendBtn.click();
+      }
+    });
+
+    // 输入框自动调整高度
+    userInputEl.addEventListener('input', function() {
+      this.style.height = 'auto';
+      this.style.height = (this.scrollHeight) + 'px';
     });
 
        document.getElementById('getReplyBtn').addEventListener('click', async () => {
@@ -1398,7 +1420,7 @@ Char为在校学生，日常主体为校服，可自由混搭个人衣物（运�
         alert(`系统提示：请求发送失败或连接断开。\n错误详情：${err.message}`);
       } finally {
         sendBtn.disabled = false;
-        sendBtn.innerText = "传递心声 (发送)";
+        sendBtn.innerText = "传思";
       }
     }
 
@@ -1582,14 +1604,45 @@ ${chatText}
       
       statusEl.style.display = 'none';
     });
+        // 背景图片处理逻辑
+    const chatBgInput = document.getElementById('chatBgInput');
+    const clearBgBtn = document.getElementById('clearBgBtn');
+
+    chatBgInput.addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        const base64String = event.target.result;
+        chatHistoryEl.style.backgroundImage = `url(${base64String})`;
+        
+        // 由于图片可能很大，我们尝试保存到 localStorage，如果失败则提示
+        try {
+          localStorage.setItem('kouyujing_chat_bg', base64String);
+        } catch (err) {
+          console.warn("图片太大，无法保存到本地存储，刷新后将丢失背景。");
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+
+    clearBgBtn.addEventListener('click', () => {
+      chatHistoryEl.style.backgroundImage = 'none';
+      chatBgInput.value = '';
+      localStorage.removeItem('kouyujing_chat_bg');
+    });
+
+    // 页面加载时恢复背景图片
+    window.addEventListener('DOMContentLoaded', () => {
+      const savedBg = localStorage.getItem('kouyujing_chat_bg');
+      if (savedBg) {
+        chatHistoryEl.style.backgroundImage = `url(${savedBg})`;
+      }
+    });
 
     // 初始化渲染
     renderMemories();
-</script>
-<script src="https://unpkg.com/vconsole@latest/dist/vconsole.min.js"></script>
-<script>
-  // 初始化 VConsole
-  var vConsole = new VConsole();
 </script>
 </body>
 </html>
