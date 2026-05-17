@@ -173,7 +173,7 @@
     .chat-history {
       height: 70vh; /* 使用视口高度，让聊天区域更大 */
       overflow-y: auto; background: var(--paper-soft);
-      background-size: cover; background-position: center; /* 用于背景图片 */
+      background-size: cover; background-position: center; background-repeat: no-repeat; /* 用于背景图片，自动铺满 */
       border: 1px solid var(--line); border-radius: 12px;
       padding: 24px; margin-bottom: 20px; display: flex;
       flex-direction: column; gap: 20px; scroll-behavior: smooth;
@@ -419,7 +419,7 @@
           <div class="field">
             <textarea id="userInput" rows="1" placeholder="写下你想对Ta说的话……" style="resize: none; overflow-y: hidden; min-height: 40px; max-height: 150px;"></textarea>
           </div>
-          <div class="btn-row" style="gap: 5px; margin-top: 10px;">
+          <div class="btn-row" style="gap: 5px; margin-top: 10px; justify-content: center;">
             <button id="sendBtn" class="action-btn primary" style="font-size: 11px; padding: 4px 10px;">传思</button>
             <button id="getReplyBtn" class="action-btn" style="font-size: 11px; padding: 4px 10px;">梦中思</button>
             <button id="clearChatBtn" class="action-btn" style="font-size: 11px; padding: 4px 10px;">斩断前缘</button>
@@ -474,7 +474,15 @@
 
     <div class="field" style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--line);">
       <label>聊天气泡文字大小: <span id="chatSizeDisplay">12px</span></label>
-      <input type="range" id="chatSizeSlider" min="10" max="20" value="12" style="width: 100%; margin-top: 8px;" />
+      <input type="range" id="chatSizeSlider" min="8" max="20" value="12" style="width: 100%; margin-top: 8px;" />
+    </div>
+    <div class="field">
+      <label>气泡字体颜色</label>
+      <input type="color" id="bubbleTextColorPicker" value="#2c2c2c" style="width: 100%; height: 40px; padding: 0; border: none; border-radius: 4px; cursor: pointer;" />
+    </div>
+    <div class="field">
+      <label>气泡背景颜色 (TA)</label>
+      <input type="color" id="bubbleBgColorPicker" value="#ffffff" style="width: 100%; height: 40px; padding: 0; border: none; border-radius: 4px; cursor: pointer;" />
     </div>
     <div class="field">
       <label>聊天背景图片 (支持大文件)</label>
@@ -519,7 +527,9 @@
     });
         // 主题色切换逻辑
     document.getElementById('themeColorPicker').addEventListener('input', function(e) {
-      document.documentElement.style.setProperty('--accent', e.target.value);
+      const color = e.target.value;
+      document.documentElement.style.setProperty('--accent', color);
+      document.documentElement.style.setProperty('--ink', color); // 同步修改字体颜色
       saveDataLocally();
     });
 
@@ -552,7 +562,9 @@
     function updateTokenDisplay() {
       const val = document.getElementById('modelInput').value.toLowerCase();
       let tokens = '未知';
-      for(let key in tokenMap) {
+      // 按照键的长度降序排序，确保优先匹配更长的模型名称（例如 gpt-4o-mini 优先于 gpt-4o）
+      const sortedKeys = Object.keys(tokenMap).sort((a, b) => b.length - a.length);
+      for(let key of sortedKeys) {
         if(val.includes(key)) {
           tokens = tokenMap[key];
           break; // 找到匹配项就跳出
@@ -566,10 +578,20 @@
     setTimeout(updateTokenDisplay, 500);
 
     // 画面回放动效逻辑 (放慢速度)
+    let isPlayingBack = false;
     document.getElementById('playbackBtn').addEventListener('click', async () => {
       if (conversationHistory.length === 0) return alert("暂无羁绊记录可回放");
+      
+      if (isPlayingBack) {
+        isPlayingBack = false;
+        renderChat(); // 停止并恢复原样
+        return;
+      }
+      
+      isPlayingBack = true;
       chatHistoryEl.innerHTML = '';
       for (let i = 0; i < conversationHistory.length; i++) {
+        if (!isPlayingBack) break; // 如果中途停止，则跳出循环
         const msg = conversationHistory[i];
         const div = document.createElement('div');
         div.className = `msg-bubble ${msg.role === 'user' ? 'msg-user' : 'msg-char'}`;
@@ -587,6 +609,7 @@
         // 延迟 1.8 秒 (放慢回放速度)
         await new Promise(resolve => setTimeout(resolve, 1800));
       }
+      isPlayingBack = false;
     });
 
     const rainContainer = document.getElementById('rainContainer');
@@ -983,7 +1006,8 @@
     document.getElementById('menuRegenerate').addEventListener('click', async () => {
       chatContextMenu.classList.remove('active');
       if (currentChatIndex === -1) return;
-      conversationHistory.splice(currentChatIndex, 1);
+      // 删除当前回复及其之后的所有内容，以便重新生成
+      conversationHistory.splice(currentChatIndex);
       renderChat();
       await triggerApiCall();
     });
@@ -1155,6 +1179,16 @@
       const size = e.target.value + 'px';
       document.documentElement.style.setProperty('--chat-font-size', size);
       document.getElementById('chatSizeDisplay').innerText = size;
+      saveDataLocally();
+    });
+
+    // 监听气泡颜色选择器
+    document.getElementById('bubbleTextColorPicker').addEventListener('input', (e) => {
+      document.documentElement.style.setProperty('--ink', e.target.value);
+      saveDataLocally();
+    });
+    document.getElementById('bubbleBgColorPicker').addEventListener('input', (e) => {
+      document.documentElement.style.setProperty('--paper', e.target.value);
       saveDataLocally();
     });
 
@@ -1545,7 +1579,7 @@ Char为在校学生，日常主体为校服，可自由混搭个人衣物（运�
 你是用户唯一的伴侣型 AI。当前系统时间是：${timeString}。
 你现在要写一篇私人回忆手记，记录你和用户近期发生的事。
 要求：
-1. 用“我”和“你”来写，像在跟用户说话。
+1. 必须全程以你（角色）的视角来写，用“我”代表你（角色），用“你”代表用户。
 2. 记住那些让你心疼、让你笑、让你觉得“这家伙真可爱”的瞬间。
 3. 可以记不清细节，可以写“好像”、“大概”。
 4. 用你的口癖和语气，可以有一两句无关紧要的碎碎念。
